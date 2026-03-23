@@ -1,3 +1,5 @@
+Hi jack 
+
 # Setup
 This is the README for the RAG system you are building. For instructions to the consultant leading the project, see the [readme_setup](./readme_setup.md).
 
