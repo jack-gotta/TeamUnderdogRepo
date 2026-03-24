@@ -41,7 +41,7 @@
           </div>
 
           <div id="step-index-body" class="step-card-body">
-            <p id="source-guidance" class="source-guidance">Using Sample source: 10-50 documents is usually enough for quick testing.</p>
+            <p id="source-guidance" class="source-guidance">Using Sample source: 10 hand-picked documents for quick smoke-testing. Switch to HuggingFace with 3200 documents for real evaluation.</p>
             <div class="ingest-options">
               <label for="source-mode">Index source</label>
               <select id="source-mode" name="source-mode">
@@ -50,7 +50,7 @@
               </select>
 
               <label for="document-count-input">Documents</label>
-              <input id="document-count-input" name="document-count" type="number" min="1" max="1000" value="10">
+              <input id="document-count-input" name="document-count" type="number" min="1" max="3200" value="10">
 
               <button id="rebuild-index-button" class="secondary-button" type="button">Build / Rebuild Index</button>
             </div>

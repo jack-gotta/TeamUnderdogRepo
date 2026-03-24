@@ -70,15 +70,55 @@ def answer_user_query(
 
 
 def score_generated_answer(expected_answer: str, generated_answer: str) -> float:
-    """Compute a lightweight lexical overlap score between expected and generated answers."""
-    expected_tokens = set(re.findall(r"[a-z0-9]+", expected_answer.lower()))
-    generated_tokens = set(re.findall(r"[a-z0-9]+", generated_answer.lower()))
+    """Compute a calibrated answer-quality score.
 
+    Strategy:
+    - Handle yes/no references explicitly so concise labels are not under-scored.
+    - For general answers, blend embedding cosine similarity with lexical overlap.
+    """
+    from llamaindex_models import get_text_embedding_3_large
+    import numpy as np
+
+    expected_text = expected_answer.strip().lower()
+    generated_text = generated_answer.strip().lower()
+    if not expected_text or not generated_text:
+        return 0.0
+
+    expected_tokens = set(re.findall(r"[a-z0-9]+", expected_text))
+    generated_tokens = set(re.findall(r"[a-z0-9]+", generated_text))
     if not expected_tokens or not generated_tokens:
         return 0.0
 
-    overlap = expected_tokens.intersection(generated_tokens)
-    return round(len(overlap) / len(expected_tokens), 3)
+    # Explicit handling for binary references like "yes" / "no".
+    first_token_match = re.match(r"\s*([a-z0-9]+)", generated_text)
+    first_token = first_token_match.group(1) if first_token_match else ""
+    if expected_text in {"yes", "no"}:
+        if first_token == expected_text:
+            return 1.0
+        if first_token in {"yes", "no"} and first_token != expected_text:
+            return 0.0
+
+    overlap_ratio = len(expected_tokens.intersection(generated_tokens)) / len(expected_tokens)
+
+    # Get controlled embedding model
+    embed_model = get_text_embedding_3_large()
+
+    # Embed both answers
+    expected_embedding = np.array(embed_model.get_text_embedding(expected_answer))
+    generated_embedding = np.array(embed_model.get_text_embedding(generated_answer))
+
+    # Compute cosine similarity manually
+    dot_product = np.dot(expected_embedding, generated_embedding)
+    norm_expected = np.linalg.norm(expected_embedding)
+    norm_generated = np.linalg.norm(generated_embedding)
+
+    if norm_expected == 0 or norm_generated == 0:
+        return 0.0
+
+    similarity = dot_product / (norm_expected * norm_generated)
+    # Blend semantic and lexical signals. Semantic gets higher weight.
+    combined_score = (0.7 * float(similarity)) + (0.3 * float(overlap_ratio))
+    return round(combined_score, 3)
 
 
 def evaluate_rag_pipeline(
@@ -106,6 +146,6 @@ def evaluate_rag_pipeline(
     return {
         "example_count": len(results),
         "average_score": average_score,
-        "passed_count": sum(1 for result in results if result["score"] >= 0.2),
+        "passed_count": sum(1 for result in results if result["score"] >= 0.3),
         "results": results,
     }

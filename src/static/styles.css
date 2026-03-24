@@ -233,6 +233,11 @@ dd,
   font-weight: 600;
 }
 
+.source-guidance-success {
+  color: var(--success);
+  font-weight: 600;
+}
+
 .ingest-options {
   display: grid;
   grid-template-columns: auto minmax(160px, 220px) auto minmax(90px, 140px) auto;

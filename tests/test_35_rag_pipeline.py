@@ -89,16 +89,38 @@ def test_answer_user_query_returns_answer_and_prompt() -> None:
             assert result["prompt"] == "Prompt text"
 
 
-def test_score_generated_answer_returns_overlap_ratio() -> None:
-    """Verify lexical evaluation returns a normalized overlap score."""
+def test_score_generated_answer_yes_no_reference_is_handled_explicitly() -> None:
+    """Verify yes/no references are scored by the leading answer polarity."""
     from rag_pipeline import score_generated_answer
 
     score = score_generated_answer(
-        expected_answer="Python is a programming language",
-        generated_answer="Python is a language",
+        expected_answer="yes",
+        generated_answer="Yes, Abraham Lincoln was the sixteenth President of the United States.",
     )
 
-    assert score == 0.8
+    assert score == 1.0
+
+
+def test_score_generated_answer_blends_semantic_and_lexical_signals() -> None:
+    """Verify general answers use blended semantic similarity and lexical overlap."""
+    from rag_pipeline import score_generated_answer
+
+    with patch('llamaindex_models.get_text_embedding_3_large') as mock_get_embedding:
+        mock_embed_model = Mock()
+        # Cosine similarity of these vectors is ~0.994.
+        mock_embed_model.get_text_embedding.side_effect = [
+            [1.0, 0.0],
+            [0.9, 0.1],
+        ]
+        mock_get_embedding.return_value = mock_embed_model
+
+        score = score_generated_answer(
+            expected_answer="Python is a programming language",
+            generated_answer="Python is a language",
+        )
+
+        # lexical overlap = 4/5 = 0.8; blended => 0.7*0.994 + 0.3*0.8 ~= 0.936
+        assert score == 0.936
 
 
 def test_evaluate_rag_pipeline_aggregates_results() -> None:
@@ -112,14 +134,16 @@ def test_evaluate_rag_pipeline_aggregates_results() -> None:
     ]
 
     with patch('rag_pipeline.answer_user_query') as mock_answer:
-        mock_answer.side_effect = [
-            {"answer": "Python is a programming language."},
-            {"answer": "Machine learning uses algorithms."},
-        ]
+        with patch('rag_pipeline.score_generated_answer') as mock_score:
+            mock_answer.side_effect = [
+                {"answer": "Python is a programming language."},
+                {"answer": "Machine learning uses algorithms."},
+            ]
+            mock_score.side_effect = [0.34, 0.62]
 
-        result = evaluate_rag_pipeline(index=mock_index, evaluation_examples=examples, top_k=2)
+            result = evaluate_rag_pipeline(index=mock_index, evaluation_examples=examples, top_k=2)
 
-        assert result["example_count"] == 2
-        assert result["average_score"] == 1.0
-        assert result["passed_count"] == 2
-        assert len(result["results"]) == 2
+            assert result["example_count"] == 2
+            assert result["average_score"] == 0.48
+            assert result["passed_count"] == 2
+            assert len(result["results"]) == 2

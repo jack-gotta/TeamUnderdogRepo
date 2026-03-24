@@ -12,6 +12,8 @@ import os
 # Global state for vector index (loaded once)
 _vector_index = None
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+INDEX_PERSIST_DIR = Path(__file__).resolve().parent.parent / ".rag_index"
+INDEX_CHECKPOINT_PATH = INDEX_PERSIST_DIR / "ingest_checkpoint.json"
 
 
 class EchoRequest(BaseModel):
@@ -118,17 +120,31 @@ def ingest(document_count: int = 10, use_sample: bool = True) -> Dict[str, Any]:
     from ingestion import load_sample_documents, load_huggingface_documents
     from vector_db import create_vector_index
     
-    # Load documents
+    # Load documents - prioritize HuggingFace for better coverage
     if use_sample:
         documents = load_sample_documents(count=document_count)
         source = "sample"
     else:
+        # Load from HuggingFace with spread sampling for better topic coverage
         documents = load_huggingface_documents(count=document_count)
-        first_source = documents[0].metadata.get("source") if documents else None
-        source = first_source if isinstance(first_source, str) else "huggingface"
+        if not documents:
+            # Fallback to sample if HF fails
+            documents = load_sample_documents(count=document_count)
+            source = "sample"
+        else:
+            first_source = documents[0].metadata.get("source") if documents else None
+            source = first_source if isinstance(first_source, str) else "huggingface"
     
-    # Create index
-    _vector_index = create_vector_index(documents=documents)
+    # Create or resume index build for this source/count combination.
+    resume_key = f"{source}:{document_count}"
+    _vector_index = create_vector_index(
+        documents=documents,
+        persist_dir=str(INDEX_PERSIST_DIR),
+        resume=True,
+        checkpoint_path=str(INDEX_CHECKPOINT_PATH),
+        resume_key=resume_key,
+        batch_size=50,
+    )
     
     return {
         "status": "success",
@@ -160,6 +176,7 @@ def vector_db_stats() -> VectorDbStats:
     return VectorDbStats(
         document_count=stats.get("document_count", 0),
         index_ready=True,
+        persist_dir=str(INDEX_PERSIST_DIR) if INDEX_PERSIST_DIR.exists() else None,
     )
 
 

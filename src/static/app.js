@@ -104,7 +104,7 @@ function getIngestConfig() {
   const sourceMode = sourceModeSelect.value === 'huggingface' ? 'huggingface' : 'sample';
   const useSample = sourceMode === 'sample';
   const requestedCount = Number.parseInt(documentCountInput.value || '10', 10);
-  const safeCount = Number.isFinite(requestedCount) ? Math.min(Math.max(requestedCount, 1), 1000) : 10;
+  const safeCount = Number.isFinite(requestedCount) ? Math.min(Math.max(requestedCount, 1), 3200) : 10;
 
   return {
     sourceMode,
@@ -167,11 +167,14 @@ function updateProcessEstimates() {
     return;
   }
 
-  const sourceMode = sourceModeSelect.value === 'huggingface' ? 'huggingface' : 'sample';
+  const { sourceMode, safeCount } = getIngestConfig();
   processRuntimeLabel.textContent = 'Estimated total time';
 
   if (sourceMode === 'huggingface') {
-    processTotalTime.textContent = '~65-196s';
+    // ~0.35-0.6s per document for embedding API calls
+    const ingestMin = Math.round(safeCount * 0.35);
+    const ingestMax = Math.round(safeCount * 0.6);
+    processTotalTime.textContent = `~${ingestMin + 3}-${ingestMax + 13}s`;
     return;
   }
 
@@ -209,17 +212,23 @@ function updateSourceGuidance() {
 
   if (sourceMode === 'huggingface') {
     if (safeCount < 300) {
-      sourceGuidance.textContent = 'Using HuggingFace source: recommended range is 300-1000 documents for better retrieval quality. Increase the count to at least 300 if answers feel off-topic.';
+      sourceGuidance.textContent = `Using HuggingFace source: the corpus has 3,200 passages total. Use 3200 for best accuracy — fewer documents miss topics in the 918 test questions. At least 300 recommended.`;
       sourceGuidance.className = 'source-guidance source-guidance-warning';
       return;
     }
 
-    sourceGuidance.textContent = 'Using HuggingFace source: 300-1000 documents is recommended and should improve retrieval relevance.';
-    sourceGuidance.className = 'source-guidance';
+    if (safeCount < 3200) {
+      sourceGuidance.textContent = `Using HuggingFace source: ${safeCount} of 3,200 passages loaded. Set to 3200 for complete coverage and best evaluation accuracy.`;
+      sourceGuidance.className = 'source-guidance';
+      return;
+    }
+
+    sourceGuidance.textContent = 'Using HuggingFace source: all 3,200 passages loaded — best possible retrieval accuracy against the 918 test questions.';
+    sourceGuidance.className = 'source-guidance source-guidance-success';
     return;
   }
 
-  sourceGuidance.textContent = 'Using Sample source: 10-50 documents is usually enough for quick testing.';
+  sourceGuidance.textContent = 'Using Sample source: 10 hand-picked documents for quick smoke-testing. Switch to HuggingFace with 3200 documents for real evaluation.';
   sourceGuidance.className = 'source-guidance';
 }
 
@@ -597,6 +606,7 @@ async function refreshBackendStatus() {
 
       if (indexReady && lastIndexedConfigSignature === null) {
         rememberIndexedConfig();
+        setupCollapsed = true;
       }
     } else {
       indexStatus.textContent = 'Unknown';
@@ -780,6 +790,8 @@ rebuildIndexButton.addEventListener('click', async () => {
     await refreshBackendStatus();
     lastRetrievedQuery = '';
     updateRetrieveButtonState();
+    setupCollapsed = true;
+    syncSetupCardState();
     processSummary.textContent = 'Index rebuilt and API ready.';
     finishRunTimer('Index build time');
   } catch (error) {
