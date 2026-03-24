@@ -1601,6 +1601,7 @@ dependencies = [
     { name = "llama-index-llms-azure-openai" },
     { name = "pandas" },
     { name = "pyarrow" },
+    { name = "pytest" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1622,6 +1623,7 @@ requires-dist = [
     { name = "llama-index-llms-azure-openai", specifier = ">=0.4.2" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "pyarrow", specifier = ">=23.0.1" },
+    { name = "pytest", specifier = ">=9.0.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.42.0" },
 ]
 

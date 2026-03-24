@@ -100,6 +100,27 @@ class QueryResponse(BaseModel):
     processing_time_ms: float
     timestamp: str
 
+class EvaluationRequest(BaseModel):
+    max_questions: Optional[int] = 50
+    include_details: bool = True
+    sample_random: bool = False
+
+class EvaluationResult(BaseModel):
+    question: str
+    expected_answer: str
+    rag_answer: str
+    is_correct: bool
+    similarity_score: float
+    processing_time_ms: float
+
+class EvaluationResponse(BaseModel):
+    total_questions: int
+    correct_answers: int
+    accuracy: float
+    average_processing_time_ms: float
+    results: List[EvaluationResult]
+    timestamp: str
+
 # Health check endpoint
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
@@ -390,6 +411,122 @@ async def search_documents(request: QueryRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+# Evaluation endpoint
+@app.post("/evaluate", response_model=EvaluationResponse)
+async def evaluate_rag_system(request: EvaluationRequest):
+    """
+    Evaluate RAG system performance against ground truth test dataset.
+
+    This endpoint:
+    1. Loads questions from the test dataset
+    2. Runs each question through the RAG pipeline
+    3. Compares answers against ground truth
+    4. Returns accuracy metrics and detailed results
+    """
+    if not INGESTION_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ingestion pipeline not available")
+
+    import time
+    import pandas as pd
+    import random
+    from difflib import SequenceMatcher
+
+    start_time = time.time()
+
+    try:
+        # Load test dataset
+        test_url = "hf://datasets/rag-datasets/rag-mini-wikipedia/data/test.parquet/part.0.parquet"
+        df = pd.read_parquet(test_url)
+
+        # Sample questions if requested
+        if request.sample_random:
+            df = df.sample(n=min(request.max_questions, len(df)), random_state=42)
+        else:
+            df = df.head(request.max_questions)
+
+        # Initialize pipeline
+        pipeline = get_pipeline()
+        if not pipeline.index:
+            existing_index = pipeline.load_existing_index()
+            if not existing_index:
+                raise HTTPException(status_code=404, detail="No vector database found. Please run ingestion first.")
+            pipeline.index = existing_index
+
+        # Process questions and evaluate
+        results = []
+        correct_count = 0
+        total_processing_time = 0
+
+        for _, row in df.iterrows():
+            question = row['question']
+            expected_answer = str(row['answer']).lower().strip()
+
+            # Run RAG query
+            question_start = time.time()
+            try:
+                rag_answer = pipeline.query_index(question, top_k=3)
+                if rag_answer:
+                    rag_answer_clean = str(rag_answer).lower().strip()
+                    question_time = (time.time() - question_start) * 1000
+                    total_processing_time += question_time
+
+                    # Evaluate correctness (simple string matching + similarity)
+                    exact_match = expected_answer in rag_answer_clean or rag_answer_clean in expected_answer
+                    similarity = SequenceMatcher(None, expected_answer, rag_answer_clean).ratio()
+
+                    # Consider correct if exact match or high similarity (>0.6)
+                    is_correct = exact_match or similarity > 0.6
+                    if is_correct:
+                        correct_count += 1
+
+                    if request.include_details:
+                        results.append(EvaluationResult(
+                            question=question,
+                            expected_answer=expected_answer,
+                            rag_answer=str(rag_answer)[:500] if rag_answer else "No answer generated",
+                            is_correct=is_correct,
+                            similarity_score=similarity,
+                            processing_time_ms=question_time
+                        ))
+                else:
+                    # No answer generated
+                    if request.include_details:
+                        results.append(EvaluationResult(
+                            question=question,
+                            expected_answer=expected_answer,
+                            rag_answer="No answer generated",
+                            is_correct=False,
+                            similarity_score=0.0,
+                            processing_time_ms=0.0
+                        ))
+            except Exception as e:
+                # Query failed
+                if request.include_details:
+                    results.append(EvaluationResult(
+                        question=question,
+                        expected_answer=expected_answer,
+                        rag_answer=f"Query failed: {str(e)}",
+                        is_correct=False,
+                        similarity_score=0.0,
+                        processing_time_ms=0.0
+                    ))
+
+        total_questions = len(df)
+        accuracy = (correct_count / total_questions) * 100 if total_questions > 0 else 0
+        avg_processing_time = total_processing_time / total_questions if total_questions > 0 else 0
+
+        return EvaluationResponse(
+            total_questions=total_questions,
+            correct_answers=correct_count,
+            accuracy=accuracy,
+            average_processing_time_ms=avg_processing_time,
+            results=results,
+            timestamp=datetime.utcnow().isoformat()
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
