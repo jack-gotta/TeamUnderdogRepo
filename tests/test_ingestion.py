@@ -167,3 +167,27 @@ class TestCreateOrLoadIndex:
         index1 = vector_store_manager_with_mock.create_or_load_index()
         index2 = vector_store_manager_with_mock.create_or_load_index()
         assert index1 is index2
+
+
+class TestIngestFromSource:
+    """Tests for source ingestion orchestration."""
+
+    def test_ingest_from_source_uses_loader(self, vector_store_manager_with_mock):
+        """Verify ingest_from_source loads docs and inserts them."""
+        docs = [Document(text="A"), Document(text="B")]
+
+        with patch("ingestion.load_documents_from_parquet", return_value=docs) as mock_loader:
+            count = vector_store_manager_with_mock.ingest_from_source(source="mock://source", limit=2)
+
+        assert count == 2
+        mock_loader.assert_called_once_with(source="mock://source", limit=2)
+
+    def test_ingest_from_source_updates_status_count(self, vector_store_manager_with_mock):
+        """Verify ingest_from_source increases vector DB document count."""
+        docs = [Document(text="Doc 1"), Document(text="Doc 2"), Document(text="Doc 3")]
+
+        with patch("ingestion.load_documents_from_parquet", return_value=docs):
+            vector_store_manager_with_mock.ingest_from_source(source="mock://source", limit=3)
+
+        status = vector_store_manager_with_mock.get_status()
+        assert status["document_count"] == 3

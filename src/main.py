@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 
-from ingestion import VectorStoreManager
+from ingestion import VectorStoreManager, DEFAULT_PASSAGES_SOURCE
+from ailab.utils.azure import get_ailab_auth_status
 
 
 app = FastAPI(title="Mini Wikipedia RAG API", version="0.1.0")
@@ -32,6 +33,24 @@ class VectorDBStatus(BaseModel):
     index_info: str | None
 
 
+class IngestRequest(BaseModel):
+    source: str = DEFAULT_PASSAGES_SOURCE
+    limit: int | None = 100
+
+
+class IngestResponse(BaseModel):
+    ingested_count: int
+    source: str
+    status: VectorDBStatus
+
+
+class AuthStatusResponse(BaseModel):
+    authenticated: bool
+    auth_source: str | None
+    scope: str
+    error: str | None = None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -40,6 +59,12 @@ def health() -> dict[str, str]:
 @app.post("/echo", response_model=EchoResponse)
 def echo(payload: EchoRequest) -> EchoResponse:
     return EchoResponse(message=payload.message)
+
+
+@app.get("/auth/status", response_model=AuthStatusResponse)
+def auth_status() -> AuthStatusResponse:
+    """Return whether the server currently has usable auth material available."""
+    return AuthStatusResponse(**get_ailab_auth_status())
 
 
 @app.get("/vectordb/status", response_model=VectorDBStatus)
@@ -57,3 +82,19 @@ def query_vectordb(
 ) -> list[dict]:
     """Query the vector database for similar documents."""
     return store.query(q, top_k=top_k)
+
+
+@app.post("/vectordb/ingest", response_model=IngestResponse)
+def ingest_vectordb(
+    payload: IngestRequest,
+    store: VectorStoreManager = Depends(get_vector_store),
+) -> IngestResponse:
+    """Ingest documents from a source parquet file into vector DB."""
+    ingested_count = store.ingest_from_source(source=payload.source, limit=payload.limit)
+    status = VectorDBStatus(**store.get_status())
+    return IngestResponse(
+        ingested_count=ingested_count,
+        source=payload.source,
+        status=status,
+    )
+
