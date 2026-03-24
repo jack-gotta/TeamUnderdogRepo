@@ -176,7 +176,13 @@ class TestIngestionPipeline:
         """Test using existing index when available."""
         mock_init_models.return_value = True
         mock_existing_index = Mock()
-        mock_load_existing.return_value = mock_existing_index
+
+        # Define a side effect that sets the index and returns it
+        def mock_load_side_effect():
+            pipeline.index = mock_existing_index
+            return mock_existing_index
+
+        mock_load_existing.side_effect = mock_load_side_effect
 
         result = pipeline.run_ingestion(force_rebuild=False)
 
