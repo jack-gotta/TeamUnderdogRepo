@@ -1,12 +1,17 @@
 """FastAPI app for Mini Wikipedia RAG system."""
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import os
 
 # Global state for vector index (loaded once)
 _vector_index = None
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 class EchoRequest(BaseModel):
@@ -47,10 +52,17 @@ app = FastAPI(
     description="Baseline API endpoints for service health and metadata.",
 )
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 
 @app.get("/")
 def root() -> dict[str, str]:
     return {"message": "Mini Wikipedia RAG API"}
+
+
+@app.get("/app")
+def frontend_app() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health")

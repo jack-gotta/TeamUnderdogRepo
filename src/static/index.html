@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Wikipedia RAG</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Mini Wikipedia RAG</p>
+      <h1>Query the retrieval layer</h1>
+      <p class="lede">
+        Submit a question, inspect the retrieved documents, and get direct feedback when the server,
+        vector index, or Azure authentication is not ready.
+      </p>
+    </section>
+
+    <section class="panel control-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Ask a question</h2>
+          <p>Current backend: <span id="backend-url">same origin</span></p>
+        </div>
+        <div id="health-pill" class="pill pill-neutral">Checking API</div>
+      </div>
+
+      <form id="query-form" class="query-form">
+        <label class="query-label" for="query-input">User query</label>
+        <div class="query-row">
+          <input
+            id="query-input"
+            name="query"
+            type="text"
+            placeholder="What is Python?"
+            autocomplete="off"
+            required
+          >
+          <button id="submit-button" type="submit">Retrieve</button>
+        </div>
+      </form>
+
+      <div id="message-banner" class="message-banner message-hidden" role="status" aria-live="polite"></div>
+
+      <dl class="meta-grid">
+        <div>
+          <dt>Index status</dt>
+          <dd id="index-status">Unknown</dd>
+        </div>
+        <div>
+          <dt>Documents indexed</dt>
+          <dd id="document-count">-</dd>
+        </div>
+        <div>
+          <dt>Embedding dimension</dt>
+          <dd id="embedding-dimension">-</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="panel results-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Retrieved documents</h2>
+          <p id="results-summary">Submit a query to inspect results.</p>
+        </div>
+      </div>
+
+      <div id="results-state" class="empty-state">
+        Retrieval results will appear here after a successful query.
+      </div>
+      <div id="results-list" class="results-list"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

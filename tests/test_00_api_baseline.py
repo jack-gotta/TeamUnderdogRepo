@@ -46,3 +46,18 @@ def test_docs_endpoint_available() -> None:
 
     assert response.status_code == 200
     assert "text/html" in response.headers["content-type"]
+
+
+def test_frontend_shell_endpoint_available() -> None:
+    response = client.get("/app")
+
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    assert "Query the retrieval layer" in response.text
+
+
+def test_frontend_static_javascript_available() -> None:
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    assert "text/javascript" in response.headers["content-type"] or "application/javascript" in response.headers["content-type"]
