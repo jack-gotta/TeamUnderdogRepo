@@ -9,6 +9,7 @@ dependencies = [
     "fastapi>=0.121.3",
     "llama-index-embeddings-azure-openai>=0.4.1",
     "llama-index-llms-azure-openai>=0.4.2",
+    "uvicorn>=0.42.0",
 ]
 
 [dependency-groups]
