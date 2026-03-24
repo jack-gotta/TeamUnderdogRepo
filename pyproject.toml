@@ -1,0 +1,26 @@
+[project]
+name = "mini-wikipedia-rag"
+version = "0.1.0"
+description = "Example RAG environment using a few wikipedia articles with Llama Index"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "azure-identity>=1.25.1",
+    "fastapi>=0.121.3",
+    "llama-index-embeddings-azure-openai>=0.4.1",
+    "llama-index-llms-azure-openai>=0.4.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+# Filter out known warnings from dependencies
+filterwarnings = [
+    "ignore::DeprecationWarning:llama_index.*",
+    "ignore:There is no current event loop:DeprecationWarning"
+]
