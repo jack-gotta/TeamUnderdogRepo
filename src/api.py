@@ -34,6 +34,13 @@ class SearchResult(BaseModel):
     metadata: Dict[str, Any] = {}
 
 
+class QueryResponse(BaseModel):
+    query: str
+    top_k: int
+    query_embedding_dimension: int
+    documents: List[SearchResult]
+
+
 app = FastAPI(
     title="Mini Wikipedia RAG API",
     version="0.1.0",
@@ -137,3 +144,37 @@ def vector_db_search(body: SearchQuery) -> List[SearchResult]:
     results = vector_search(_vector_index, body.query, top_k=body.top_k)
     
     return [SearchResult(**result) for result in results]
+
+
+@app.post("/query", response_model=QueryResponse)
+def query_documents(body: SearchQuery) -> QueryResponse:
+    """Accept a user query and return retrieved documents.
+
+    Args:
+        body: SearchQuery with query text and top_k parameter.
+
+    Returns:
+        QueryResponse with embedding metadata and retrieved documents.
+    """
+    global _vector_index
+
+    if _vector_index is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Vector index not initialized. Call /ingest first.",
+        )
+
+    from vector_db import retrieve_relevant_documents
+
+    result = retrieve_relevant_documents(
+        index=_vector_index,
+        query=body.query,
+        top_k=body.top_k,
+    )
+
+    return QueryResponse(
+        query=result["query"],
+        top_k=result["top_k"],
+        query_embedding_dimension=result["query_embedding_dimension"],
+        documents=[SearchResult(**document) for document in result["documents"]],
+    )

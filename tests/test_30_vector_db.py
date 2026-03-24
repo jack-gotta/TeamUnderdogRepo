@@ -63,6 +63,44 @@ def test_vector_db_similarity_search_with_mock() -> None:
     assert "metadata" in results[0]
 
 
+def test_embed_query_uses_controlled_embedding_model() -> None:
+    """Verify user queries are embedded through the model isolation layer."""
+    from vector_db import embed_query
+
+    with patch('llamaindex_models.get_text_embedding_3_large') as mock_get_embedding_model:
+        mock_embedding_model = Mock()
+        mock_embedding_model.get_query_embedding.return_value = [0.1, 0.2, 0.3]
+        mock_get_embedding_model.return_value = mock_embedding_model
+
+        embedding = embed_query("What is Python?")
+
+        assert embedding == [0.1, 0.2, 0.3]
+        mock_embedding_model.get_query_embedding.assert_called_once_with("What is Python?")
+
+
+def test_retrieve_relevant_documents_returns_query_metadata() -> None:
+    """Verify query retrieval returns embedding metadata and top documents."""
+    from vector_db import retrieve_relevant_documents
+    from llama_index.core import VectorStoreIndex
+
+    mock_index = Mock(spec=VectorStoreIndex)
+
+    with patch('vector_db.embed_query', return_value=[0.1, 0.2, 0.3, 0.4]) as mock_embed_query:
+        with patch('vector_db.vector_search') as mock_vector_search:
+            mock_vector_search.return_value = [
+                {"text": "Python document", "score": 0.87, "metadata": {"source": "sample"}}
+            ]
+
+            result = retrieve_relevant_documents(mock_index, query="What is Python?", top_k=2)
+
+            assert result["query"] == "What is Python?"
+            assert result["top_k"] == 2
+            assert result["query_embedding_dimension"] == 4
+            assert len(result["documents"]) == 1
+            mock_embed_query.assert_called_once_with("What is Python?")
+            mock_vector_search.assert_called_once_with(index=mock_index, query="What is Python?", top_k=2)
+
+
 def test_vector_db_registry_contains_correct_model() -> None:
     """Verify vector DB uses correct embedding model from registry."""
     from llamaindex_models import get_available_models

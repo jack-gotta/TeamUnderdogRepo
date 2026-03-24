@@ -95,6 +95,47 @@ def vector_search(
     return output
 
 
+def embed_query(query: str) -> List[float]:
+    """Convert a user query into an embedding vector.
+
+    Args:
+        query: Query text to embed.
+
+    Returns:
+        Query embedding vector.
+    """
+    from llamaindex_models import get_text_embedding_3_large
+
+    embed_model = get_text_embedding_3_large()
+    return embed_model.get_query_embedding(query)
+
+
+def retrieve_relevant_documents(
+    index: VectorStoreIndex,
+    query: str,
+    top_k: int = 3,
+) -> Dict[str, Any]:
+    """Run the query-to-retrieval flow for a user query.
+
+    Args:
+        index: VectorStoreIndex to search.
+        query: User query text.
+        top_k: Number of top results to return.
+
+    Returns:
+        Dictionary containing query metadata and retrieved documents.
+    """
+    query_embedding = embed_query(query)
+    results = vector_search(index=index, query=query, top_k=top_k)
+
+    return {
+        "query": query,
+        "top_k": top_k,
+        "query_embedding_dimension": len(query_embedding),
+        "documents": results,
+    }
+
+
 def get_index_stats(index: VectorStoreIndex) -> Dict[str, Any]:
     """Get statistics about the vector index.
     

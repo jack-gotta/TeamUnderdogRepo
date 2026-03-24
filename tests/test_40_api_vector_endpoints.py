@@ -114,3 +114,44 @@ def test_search_endpoint_with_mock_index() -> None:
     
     # Clean up
     api._vector_index = None
+
+
+def test_query_endpoint_no_index() -> None:
+    """Verify /query returns error when no index loaded."""
+    import api
+    api._vector_index = None
+
+    response = client.post("/query", json={"query": "What is Python?"})
+
+    assert response.status_code == 400
+    assert "not initialized" in response.json()["detail"].lower()
+
+
+def test_query_endpoint_returns_documents() -> None:
+    """Verify /query returns retrieval metadata and documents."""
+    import api
+
+    api._vector_index = Mock()
+
+    with patch('vector_db.retrieve_relevant_documents') as mock_retrieve_relevant_documents:
+        mock_retrieve_relevant_documents.return_value = {
+            "query": "What is Python?",
+            "top_k": 2,
+            "query_embedding_dimension": 1536,
+            "documents": [
+                {"text": "Python is a programming language.", "score": 0.91, "metadata": {"source": "sample"}},
+                {"text": "Machine learning uses Python.", "score": 0.74, "metadata": {"source": "sample"}},
+            ],
+        }
+
+        response = client.post("/query", json={"query": "What is Python?", "top_k": 2})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["query"] == "What is Python?"
+        assert data["top_k"] == 2
+        assert data["query_embedding_dimension"] == 1536
+        assert len(data["documents"]) == 2
+        assert data["documents"][0]["text"] == "Python is a programming language."
+
+    api._vector_index = None

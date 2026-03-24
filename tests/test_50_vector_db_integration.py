@@ -45,6 +45,22 @@ def test_vector_db_real_similarity_search() -> None:
     assert len(results) > 0
 
 
+def test_query_to_retrieval_flow_real() -> None:
+    """Integration test: Embed a query and retrieve relevant documents end-to-end."""
+    from vector_db import create_vector_index, retrieve_relevant_documents
+    from ingestion import load_sample_documents
+
+    docs = load_sample_documents(count=5)
+    index = create_vector_index(documents=docs)
+
+    result = retrieve_relevant_documents(index, query="Python programming language", top_k=2)
+
+    assert result["query"] == "Python programming language"
+    assert result["top_k"] == 2
+    assert result["query_embedding_dimension"] > 0
+    assert len(result["documents"]) > 0
+
+
 def test_vector_db_persist_real() -> None:
     """Integration test: Persist and reload real index."""
     import tempfile
