@@ -867,6 +867,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "azure-identity" },
     { name = "fastapi" },
+    { name = "llama-index-core" },
     { name = "llama-index-embeddings-azure-openai" },
     { name = "llama-index-llms-azure-openai" },
     { name = "uvicorn" },
@@ -881,6 +882,7 @@ dev = [
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.25.1" },
     { name = "fastapi", specifier = ">=0.121.3" },
+    { name = "llama-index-core", specifier = ">=0.14.8" },
     { name = "llama-index-embeddings-azure-openai", specifier = ">=0.4.1" },
     { name = "llama-index-llms-azure-openai", specifier = ">=0.4.2" },
     { name = "uvicorn", specifier = ">=0.42.0" },

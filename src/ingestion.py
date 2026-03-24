@@ -1,0 +1,77 @@
+"""Document ingestion pipeline for the RAG system.
+
+Loads documents from various sources (HuggingFace, local files, sample data)
+and converts them to LlamaIndex Document format.
+"""
+
+from typing import List
+from llama_index.core import Document
+
+
+def load_sample_documents(count: int = 10) -> List[Document]:
+    """Load sample Wikipedia-like documents for development and testing.
+    
+    Args:
+        count: Number of sample documents to generate.
+        
+    Returns:
+        List of LlamaIndex Document objects.
+    """
+    # Sample document texts (from rag-mini-wikipedia theme)
+    sample_texts = [
+        "Python is a high-level, interpreted programming language created by Guido van Rossum. First released in 1991, Python's design philosophy emphasizes code readability.",
+        "Machine learning is a subset of artificial intelligence that focuses on the development of algorithms and statistical models that enable computers to improve their performance on tasks.",
+        "The Internet is a global system of interconnected computer networks that use the Internet protocol suite to communicate between networks and devices.",
+        "Data science is an interdisciplinary field that uses scientific methods, processes, algorithms and systems to extract knowledge and insights from structured and unstructured data.",
+        "Cloud computing is the on-demand availability of computer system resources, especially data storage and computing power, without direct active management by the user.",
+        "Artificial Intelligence is intelligence demonstrated by machines, as opposed to the natural intelligence displayed by animals and humans.",
+        "Neural networks are computing systems inspired by biological neural networks that constitute animal brains. They are fundamental to deep learning models.",
+        "Natural language processing is a subfield of linguistics, computer science, and artificial intelligence concerned with the interactions between computers and human language.",
+        "Vector embeddings are numeric representations of text that capture semantic meaning. They are central to modern information retrieval and RAG systems.",
+        "Retrieval-augmented generation is a technique that combines information retrieval with generative models to improve the quality of generated text.",
+    ]
+    
+    # Generate documents
+    docs = []
+    for i in range(min(count, len(sample_texts))):
+        doc = Document(
+            text=sample_texts[i],
+            metadata={
+                "source": "sample",
+                "index": i,
+                "title": f"Sample Document {i}",
+            }
+        )
+        docs.append(doc)
+    
+    # If more documents are requested than available, cycle through samples
+    while len(docs) < count:
+        i = len(docs) % len(sample_texts)
+        doc = Document(
+            text=sample_texts[i],
+            metadata={
+                "source": "sample",
+                "index": len(docs),
+                "title": f"Sample Document {len(docs)}",
+            }
+        )
+        docs.append(doc)
+    
+    return docs
+
+
+def load_huggingface_documents() -> List[Document]:
+    """Load documents from HuggingFace rag-mini-wikipedia dataset.
+    
+    This function will load from:
+    hf://datasets/rag-datasets/rag-mini-wikipedia/data/passages.parquet/part.0.parquet
+    
+    Currently returns sample documents for testing. To be fully implemented when
+    HuggingFace datasets library is integrated.
+    
+    Returns:
+        List of LlamaIndex Document objects.
+    """
+    # For now, return sample documents
+    # This will be extended to actually load from HF when infrastructure is ready
+    return load_sample_documents(count=50)
