@@ -46,6 +46,28 @@ class QueryResponse(BaseModel):
     documents: List[SearchResult]
 
 
+class PromptResponse(QueryResponse):
+    prompt: str
+
+
+class AnswerResponse(PromptResponse):
+    answer: str
+
+
+class EvaluationItem(BaseModel):
+    query: str
+    expected_answer: str
+    generated_answer: str
+    score: float
+
+
+class EvaluationSummary(BaseModel):
+    example_count: int
+    average_score: float
+    passed_count: int
+    results: List[EvaluationItem]
+
+
 app = FastAPI(
     title="Mini Wikipedia RAG API",
     version="0.1.0",
@@ -189,4 +211,76 @@ def query_documents(body: SearchQuery) -> QueryResponse:
         top_k=result["top_k"],
         query_embedding_dimension=result["query_embedding_dimension"],
         documents=[SearchResult(**document) for document in result["documents"]],
+    )
+
+
+@app.post("/rag/prompt", response_model=PromptResponse)
+def rag_prompt(body: SearchQuery) -> PromptResponse:
+    """Construct an augmented prompt from a query and retrieved documents."""
+    global _vector_index
+
+    if _vector_index is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Vector index not initialized. Call /ingest first.",
+        )
+
+    from rag_pipeline import prepare_prompt_response
+
+    result = prepare_prompt_response(index=_vector_index, query=body.query, top_k=body.top_k)
+    return PromptResponse(
+        query=result["query"],
+        top_k=result["top_k"],
+        query_embedding_dimension=result["query_embedding_dimension"],
+        documents=[SearchResult(**document) for document in result["documents"]],
+        prompt=result["prompt"],
+    )
+
+
+@app.post("/rag/answer", response_model=AnswerResponse)
+def rag_answer(body: SearchQuery) -> AnswerResponse:
+    """Generate a grounded answer from retrieved documents and GPT-4o."""
+    global _vector_index
+
+    if _vector_index is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Vector index not initialized. Call /ingest first.",
+        )
+
+    from rag_pipeline import answer_user_query
+
+    result = answer_user_query(index=_vector_index, query=body.query, top_k=body.top_k)
+    return AnswerResponse(
+        query=result["query"],
+        top_k=result["top_k"],
+        query_embedding_dimension=result["query_embedding_dimension"],
+        documents=[SearchResult(**document) for document in result["documents"]],
+        prompt=result["prompt"],
+        answer=result["answer"],
+    )
+
+
+@app.get("/rag/evaluate", response_model=EvaluationSummary)
+def rag_evaluate(limit: int = 3, top_k: int = 3) -> EvaluationSummary:
+    """Evaluate the RAG answer flow against reference question-answer pairs."""
+    global _vector_index
+
+    if _vector_index is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Vector index not initialized. Call /ingest first.",
+        )
+
+    from ingestion import load_huggingface_test_questions
+    from rag_pipeline import evaluate_rag_pipeline
+
+    examples = load_huggingface_test_questions(count=limit)
+    result = evaluate_rag_pipeline(index=_vector_index, evaluation_examples=examples, top_k=top_k)
+
+    return EvaluationSummary(
+        example_count=result["example_count"],
+        average_score=result["average_score"],
+        passed_count=result["passed_count"],
+        results=[EvaluationItem(**item) for item in result["results"]],
     )

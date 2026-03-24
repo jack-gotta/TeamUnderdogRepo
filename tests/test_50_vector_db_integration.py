@@ -78,3 +78,21 @@ def test_vector_db_persist_real() -> None:
         # Reload
         loaded_index = load_vector_index(persist_dir=index_path)
         assert loaded_index is not None
+
+
+def test_rag_answer_flow_real() -> None:
+    """Integration test: Generate an answer with real retrieval and GPT-4o."""
+    from ingestion import load_sample_documents
+    from rag_pipeline import answer_user_query
+    from vector_db import create_vector_index
+
+    docs = load_sample_documents(count=5)
+    index = create_vector_index(documents=docs)
+
+    result = answer_user_query(index=index, query="What is Python?", top_k=2)
+
+    assert result["query"] == "What is Python?"
+    assert result["query_embedding_dimension"] > 0
+    assert len(result["documents"]) > 0
+    assert isinstance(result["answer"], str)
+    assert len(result["answer"]) > 0

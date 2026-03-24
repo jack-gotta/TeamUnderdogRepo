@@ -12,8 +12,8 @@
       <p class="eyebrow">Mini Wikipedia RAG</p>
       <h1>Query the retrieval layer</h1>
       <p class="lede">
-        Submit a question, inspect the retrieved documents, and get direct feedback when the server,
-        vector index, or Azure authentication is not ready.
+        Submit a question, inspect the generated answer and retrieved documents, and get direct
+        feedback when the server, vector index, or Azure authentication is not ready.
       </p>
     </section>
 
@@ -21,7 +21,7 @@
       <div class="panel-header">
         <div>
           <h2>Ask a question</h2>
-          <p>Current backend: <span id="backend-url">same origin</span></p>
+          <p>Current backend: retrieval plus answer generation on <span id="backend-url">same origin</span></p>
         </div>
         <div id="health-pill" class="pill pill-neutral">Checking API</div>
       </div>
@@ -62,9 +62,17 @@
     <section class="panel results-panel">
       <div class="panel-header">
         <div>
-          <h2>Retrieved documents</h2>
-          <p id="results-summary">Submit a query to inspect results.</p>
+          <h2>Answer and retrieved context</h2>
+          <p id="results-summary">Submit a query to inspect the generated answer and supporting documents.</p>
         </div>
+      </div>
+
+      <div class="answer-card">
+        <p class="answer-label">Generated answer</p>
+        <div id="answer-state" class="empty-state">
+          The generated answer will appear here after a successful query.
+        </div>
+        <div id="answer-text" class="answer-text"></div>
       </div>
 
       <div id="results-state" class="empty-state">

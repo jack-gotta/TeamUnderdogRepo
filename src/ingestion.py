@@ -4,7 +4,7 @@ Loads documents from various sources (HuggingFace, local files, sample data)
 and converts them to LlamaIndex Document format.
 """
 
-from typing import List
+from typing import List, Dict, Any
 from llama_index.core import Document
 
 
@@ -75,3 +75,58 @@ def load_huggingface_documents() -> List[Document]:
     # For now, return sample documents
     # This will be extended to actually load from HF when infrastructure is ready
     return load_sample_documents(count=50)
+
+
+def load_sample_evaluation_examples(count: int = 5) -> List[Dict[str, Any]]:
+    """Load sample question-answer pairs for RAG evaluation.
+
+    Args:
+        count: Number of examples to return.
+
+    Returns:
+        List of dictionaries containing a query and expected answer.
+    """
+    examples = [
+        {
+            "query": "What is Python?",
+            "expected_answer": "Python is a high-level, interpreted programming language created by Guido van Rossum.",
+            "reference_title": "Sample Document 0",
+        },
+        {
+            "query": "What is machine learning?",
+            "expected_answer": "Machine learning is a subset of artificial intelligence focused on algorithms that improve performance on tasks.",
+            "reference_title": "Sample Document 1",
+        },
+        {
+            "query": "What is the Internet?",
+            "expected_answer": "The Internet is a global system of interconnected computer networks that communicate using the Internet protocol suite.",
+            "reference_title": "Sample Document 2",
+        },
+        {
+            "query": "What are vector embeddings?",
+            "expected_answer": "Vector embeddings are numeric representations of text that capture semantic meaning.",
+            "reference_title": "Sample Document 8",
+        },
+        {
+            "query": "What is retrieval-augmented generation?",
+            "expected_answer": "Retrieval-augmented generation combines information retrieval with generative models to improve generated text.",
+            "reference_title": "Sample Document 9",
+        },
+    ]
+
+    return examples[:count]
+
+
+def load_huggingface_test_questions(count: int = 5) -> List[Dict[str, Any]]:
+    """Load evaluation questions for the RAG system.
+
+    This is intended to eventually load from:
+    hf://datasets/rag-datasets/rag-mini-wikipedia/data/test.parquet/part.0.parquet
+
+    Args:
+        count: Number of examples to return.
+
+    Returns:
+        List of question-answer evaluation examples.
+    """
+    return load_sample_evaluation_examples(count=count)

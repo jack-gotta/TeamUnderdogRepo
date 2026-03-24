@@ -9,6 +9,8 @@ const embeddingDimension = document.getElementById('embedding-dimension');
 const resultsSummary = document.getElementById('results-summary');
 const resultsState = document.getElementById('results-state');
 const resultsList = document.getElementById('results-list');
+const answerState = document.getElementById('answer-state');
+const answerText = document.getElementById('answer-text');
 
 function setHealth(text, className) {
   healthPill.textContent = text;
@@ -34,14 +36,21 @@ function clearResults(message = 'Retrieval results will appear here after a succ
   resultsList.innerHTML = '';
   resultsState.textContent = message;
   resultsState.style.display = 'block';
-  resultsSummary.textContent = 'Submit a query to inspect results.';
+  resultsSummary.textContent = 'Submit a query to inspect the generated answer and supporting documents.';
   embeddingDimension.textContent = '-';
+  answerText.textContent = '';
+  answerText.style.display = 'none';
+  answerState.textContent = 'The generated answer will appear here after a successful query.';
+  answerState.style.display = 'block';
 }
 
 function renderResults(payload) {
   const documents = payload.documents || [];
   embeddingDimension.textContent = String(payload.query_embedding_dimension ?? '-');
   resultsSummary.textContent = `Showing ${documents.length} retrieved document${documents.length === 1 ? '' : 's'} for "${payload.query}".`;
+  answerState.style.display = 'none';
+  answerText.textContent = payload.answer || 'No generated answer was returned.';
+  answerText.style.display = 'block';
 
   if (!documents.length) {
     clearResults('The backend returned no retrieved documents for this query.');
@@ -156,7 +165,7 @@ async function ensureIndexReady() {
 }
 
 async function runQuery(query) {
-  const response = await fetch('/query', {
+  const response = await fetch('/rag/answer', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, top_k: 3 }),
@@ -165,7 +174,7 @@ async function runQuery(query) {
   const payload = await parseResponse(response);
 
   if (response.status === 404) {
-    throw new Error('The /query endpoint is missing on the running server. Restart FastAPI so it picks up the Sprint 3 backend changes.');
+    throw new Error('The /rag/answer endpoint is missing on the running server. Restart FastAPI so it picks up the Sprint 4 backend changes.');
   }
 
   if (response.status === 400 && payload && typeof payload === 'object' && String(payload.detail || '').includes('Call /ingest first')) {
