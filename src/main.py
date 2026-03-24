@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional
 import logging
 import sys
 import os
+from datetime import datetime
 
 # Add current directory to path for imports
 sys.path.append(os.path.dirname(__file__))
@@ -23,6 +24,14 @@ try:
 except ImportError as e:
     logging.warning(f"Model imports failed: {e}")
     MODELS_AVAILABLE = False
+
+# Import ingestion pipeline
+try:
+    from ingestion import get_pipeline
+    INGESTION_AVAILABLE = True
+except ImportError as e:
+    logging.warning(f"Ingestion pipeline import failed: {e}")
+    INGESTION_AVAILABLE = False
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -47,6 +56,28 @@ class EchoRequest(BaseModel):
 class EchoResponse(BaseModel):
     echo: str
     received_metadata: Optional[Dict[str, Any]] = None
+    timestamp: str
+
+class VectorDBStatusResponse(BaseModel):
+    available: bool
+    documents_loaded: int = 0
+    nodes_created: int = 0
+    embeddings_generated: int = 0
+    index_created: bool = False
+    index_available: bool = False
+    last_ingestion: Optional[str] = None
+    total_documents: Optional[int] = None
+    total_vectors: Optional[int] = None
+    timestamp: str
+
+class IngestionRequest(BaseModel):
+    max_documents: Optional[int] = None
+    force_rebuild: bool = False
+
+class IngestionResponse(BaseModel):
+    success: bool
+    message: str
+    stats: Dict[str, Any]
     timestamp: str
 
 # Health check endpoint
@@ -106,7 +137,12 @@ async def root():
         "message": "Wikipedia RAG System API",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "vector_db": {
+            "status": "/vectordb/status",
+            "ingest": "/vectordb/ingest",
+            "info": "/vectordb/info"
+        }
     }
 
 # Model status endpoint
@@ -130,6 +166,78 @@ async def models_status():
         }
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Model access failed: {str(e)}")
+
+# Vector database endpoints
+@app.get("/vectordb/info")
+async def vectordb_info():
+    """
+    Get information about the vector database system.
+    """
+    return {
+        "description": "Wikipedia RAG Vector Database",
+        "embedding_model": "text-embedding-3-large",
+        "endpoints": {
+            "status": "/vectordb/status",
+            "ingest": "/vectordb/ingest",
+            "info": "/vectordb/info"
+        }
+    }
+
+@app.get("/vectordb/status", response_model=VectorDBStatusResponse)
+async def vectordb_status():
+    """
+    Get the current status of the vector database.
+    """
+    if not INGESTION_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ingestion pipeline not available")
+
+    try:
+        pipeline = get_pipeline()
+        stats = pipeline.get_index_stats()
+
+        return VectorDBStatusResponse(
+            available=True,
+            documents_loaded=stats.get("documents_loaded", 0),
+            nodes_created=stats.get("nodes_created", 0),
+            embeddings_generated=stats.get("embeddings_generated", 0),
+            index_created=stats.get("index_created", False),
+            index_available=stats.get("index_available", False),
+            last_ingestion=stats.get("last_ingestion"),
+            total_documents=stats.get("total_documents"),
+            total_vectors=stats.get("total_vectors"),
+            timestamp=datetime.utcnow().isoformat()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get vector DB status: {str(e)}")
+
+@app.post("/vectordb/ingest", response_model=IngestionResponse)
+async def vectordb_ingest(request: IngestionRequest):
+    """
+    Trigger document ingestion and vector database creation.
+    """
+    if not INGESTION_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Ingestion pipeline not available")
+
+    try:
+        pipeline = get_pipeline()
+
+        # Run ingestion
+        success = pipeline.run_ingestion(
+            max_docs=request.max_documents,
+            force_rebuild=request.force_rebuild
+        )
+
+        # Get updated stats
+        stats = pipeline.get_index_stats()
+
+        return IngestionResponse(
+            success=success,
+            message="Ingestion completed successfully" if success else "Ingestion failed",
+            stats=stats,
+            timestamp=datetime.utcnow().isoformat()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
