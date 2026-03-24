@@ -9,11 +9,19 @@ dependencies = [
     "fastapi>=0.121.3",
     "llama-index-embeddings-azure-openai>=0.4.1",
     "llama-index-llms-azure-openai>=0.4.2",
+    "llama-index-core>=0.13.0",
+    "pandas>=2.0.0",
+    "uvicorn>=0.27.0",
+    "pyarrow>=15.0.0",
+    "huggingface-hub>=0.20.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.1",
+    "httpx>=0.25.0",
+    "jupyter>=1.0.0",
+    "nbconvert>=7.0.0",
 ]
 
 [tool.pytest.ini_options]
