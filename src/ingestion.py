@@ -17,6 +17,23 @@ def _get_hf_load_dataset():
         return None
 
 
+def _spread_indices(total_count: int, desired_count: int) -> List[int]:
+    """Return evenly spread indices across a dataset.
+
+    This avoids taking only the first N rows, which can over-represent a single
+    article/topic in ordered corpora.
+    """
+    if total_count <= 0 or desired_count <= 0:
+        return []
+    if desired_count >= total_count:
+        return list(range(total_count))
+    if desired_count == 1:
+        return [0]
+
+    step = (total_count - 1) / (desired_count - 1)
+    return [int(i * step) for i in range(desired_count)]
+
+
 def load_sample_documents(count: int = 10) -> List[Document]:
     """Load sample Wikipedia-like documents for development and testing.
     
@@ -95,9 +112,9 @@ def load_huggingface_documents(count: int = 50) -> List[Document]:
         )
 
         docs: List[Document] = []
-        limit = min(count, len(dataset))
-        for i in range(limit):
-            row = dataset[i]
+        selected_indices = _spread_indices(len(dataset), count)
+        for i, dataset_index in enumerate(selected_indices):
+            row = dataset[dataset_index]
             text = str(row.get("passage", "")).strip()
             if not text:
                 continue
@@ -110,6 +127,7 @@ def load_huggingface_documents(count: int = 50) -> List[Document]:
                         "dataset": "rag-datasets/rag-mini-wikipedia",
                         "split": "passages",
                         "index": i,
+                        "dataset_index": dataset_index,
                         "id": row.get("id", i),
                     },
                 )

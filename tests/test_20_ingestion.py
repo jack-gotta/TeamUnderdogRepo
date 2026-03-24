@@ -70,6 +70,33 @@ def test_load_huggingface_documents_uses_hf_rows_when_available() -> None:
     assert docs[0].metadata["id"] == 11
 
 
+def test_spread_indices_evenly_samples_dataset() -> None:
+    """Verify spread index helper selects rows across the corpus, not just the head."""
+    from ingestion import _spread_indices
+
+    indices = _spread_indices(total_count=10, desired_count=3)
+
+    assert indices[0] == 0
+    assert indices[-1] == 9
+    assert indices != [0, 1, 2]
+
+
+def test_load_huggingface_documents_spreads_selected_rows() -> None:
+    """Verify HuggingFace loader samples spread rows when count is smaller than dataset."""
+    from ingestion import load_huggingface_documents
+
+    mock_dataset = [{"id": i, "passage": f"Passage {i}"} for i in range(10)]
+    mock_loader = Mock(return_value=mock_dataset)
+
+    with patch("ingestion._get_hf_load_dataset", return_value=mock_loader):
+        docs = load_huggingface_documents(count=3)
+
+    dataset_indices = [doc.metadata["dataset_index"] for doc in docs]
+    assert dataset_indices[0] == 0
+    assert dataset_indices[-1] == 9
+    assert dataset_indices != [0, 1, 2]
+
+
 def test_load_huggingface_test_questions_uses_hf_rows_when_available() -> None:
     """Verify HuggingFace test-question loader maps question/answer pairs."""
     from ingestion import load_huggingface_test_questions

@@ -23,41 +23,45 @@
           <h2>Run the RAG flow in order</h2>
           <p>Current backend: retrieval plus answer generation on <span id="backend-url">same origin</span></p>
         </div>
+        <button id="check-health-button" class="pill pill-neutral" type="button">Check API</button>
       </div>
 
       <div class="step-flow" aria-live="polite">
-        <section class="step-card" id="step-health-card">
-          <div class="step-title-row">
-            <p class="step-label">Step 1</p>
-            <div id="health-pill" class="pill pill-neutral">Checking API</div>
-          </div>
-          <h3>Verify API health</h3>
-          <p id="health-status-text" class="step-help">Check that the backend is reachable before indexing or querying.</p>
-          <button id="check-health-button" class="secondary-button" type="button">Check API health</button>
-        </section>
-
         <section class="step-card" id="step-index-card">
-          <p class="step-label">Step 2</p>
-          <h3>Select a source and build index</h3>
-          <p class="step-help">Choose your dataset, then build or rebuild the vector index.</p>
-          <div class="ingest-options">
-            <label for="source-mode">Index source</label>
-            <select id="source-mode" name="source-mode">
-              <option value="sample" selected>Sample documents</option>
-              <option value="huggingface">HuggingFace passages</option>
-            </select>
+          <div class="step-title-row">
+            <div>
+              <p class="step-label">Step 1</p>
+              <h3>Select a source and build index</h3>
+              <p class="step-help">Build once, then keep this section collapsed unless you want to change source or corpus size.</p>
+            </div>
+            <div class="step-card-actions">
+              <p id="setup-summary" class="step-summary">Configure source and size before building the index.</p>
+              <button id="toggle-index-card-button" class="ghost-button" type="button" hidden>Collapse setup</button>
+            </div>
+          </div>
 
-            <label for="document-count-input">Documents</label>
-            <input id="document-count-input" name="document-count" type="number" min="1" max="500" value="10">
+          <div id="step-index-body" class="step-card-body">
+            <p id="source-guidance" class="source-guidance">Using Sample source: 10-50 documents is usually enough for quick testing.</p>
+            <div class="ingest-options">
+              <label for="source-mode">Index source</label>
+              <select id="source-mode" name="source-mode">
+                <option value="sample" selected>Sample documents</option>
+                <option value="huggingface">HuggingFace passages</option>
+              </select>
 
-            <button id="rebuild-index-button" class="secondary-button" type="button">Build / Rebuild Index</button>
+              <label for="document-count-input">Documents</label>
+              <input id="document-count-input" name="document-count" type="number" min="1" max="1000" value="10">
+
+              <button id="rebuild-index-button" class="secondary-button" type="button">Build / Rebuild Index</button>
+            </div>
           </div>
         </section>
 
         <section class="step-card" id="step-query-card">
-          <p class="step-label">Step 3</p>
+          <p class="step-label">Step 2</p>
           <h3>Ask a question</h3>
-          <p class="step-help">Run retrieval plus answer generation and inspect the evidence below.</p>
+          <p class="step-help">Run retrieval plus answer generation, inspect the evidence, and hide weak answers when the retrieval quality is too low.</p>
+
           <form id="query-form" class="query-form">
             <label class="query-label" for="query-input">User query</label>
             <div class="query-row">
@@ -71,7 +75,31 @@
               >
               <button id="submit-button" type="submit">Retrieve</button>
             </div>
+
+            <div class="query-controls">
+              <div class="control-field">
+                <label for="top-k-input">Top K</label>
+                <input id="top-k-input" name="top-k" type="number" min="1" max="8" value="3">
+              </div>
+              <div class="control-field">
+                <label for="answer-threshold-select">Answer policy</label>
+                <select id="answer-threshold-select" name="answer-threshold">
+                  <option value="0.22" selected>Hide only ungrounded answers</option>
+                  <option value="0.45">Hide answers unless confidence is medium+</option>
+                  <option value="0">Always show model answer</option>
+                </select>
+              </div>
+            </div>
           </form>
+
+          <div class="sample-questions">
+            <p class="sample-questions-label">Try a quick question</p>
+            <div class="sample-question-list">
+              <button type="button" class="sample-question-chip" data-question="What is Python?">What is Python?</button>
+              <button type="button" class="sample-question-chip" data-question="What are vector embeddings?">What are vector embeddings?</button>
+              <button type="button" class="sample-question-chip" data-question="What is retrieval-augmented generation?">What is retrieval-augmented generation?</button>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -98,7 +126,7 @@
         <div>
           <h2>Answer and retrieved context</h2>
           <p id="results-summary">Submit a query to inspect the generated answer and supporting documents.</p>
-          <p class="results-hint">How to read scores: higher values indicate stronger retrieval relevance.</p>
+          <p class="results-hint">Low scores should be treated as retrieval failure, not as weak proof for a confident answer.</p>
         </div>
       </div>
 
@@ -119,31 +147,71 @@
             </div>
           </dl>
 
-          <div class="answer-card">
-            <p class="answer-label">Generated answer</p>
-            <div id="answer-state" class="empty-state">
-              The generated answer will appear here after a successful query.
-            </div>
-            <div id="answer-text" class="answer-text"></div>
+          <div id="grounding-alert" class="grounding-alert grounding-alert-hidden" aria-live="polite"></div>
+
+          <div class="result-tabs" role="tablist" aria-label="Result sections">
+            <button type="button" class="result-tab result-tab-active" data-tab="answer" aria-selected="true">Answer</button>
+            <button type="button" class="result-tab" data-tab="evidence" aria-selected="false">Evidence</button>
+            <button type="button" class="result-tab" data-tab="prompt" aria-selected="false">Prompt</button>
           </div>
 
-          <div id="results-state" class="empty-state">
-            Retrieval results will appear here after a successful query.
-          </div>
-          <div id="results-list" class="results-list"></div>
+          <section id="tab-answer" class="tab-panel tab-panel-active" role="tabpanel">
+            <div class="answer-card">
+              <p class="answer-label">Grounded answer</p>
+              <div id="answer-state" class="empty-state">
+                The generated answer will appear here after a successful query.
+              </div>
+              <div id="answer-text" class="answer-text"></div>
+            </div>
+          </section>
+
+          <section id="tab-evidence" class="tab-panel" role="tabpanel" hidden>
+            <div id="results-state" class="empty-state">
+              Retrieval results will appear here after a successful query.
+            </div>
+            <div id="results-list" class="results-list"></div>
+          </section>
+
+          <section id="tab-prompt" class="tab-panel" role="tabpanel" hidden>
+            <div class="prompt-card">
+              <p class="answer-label">Augmented prompt</p>
+              <div id="prompt-state" class="empty-state">
+                The final prompt will appear here after a successful query.
+              </div>
+              <pre id="prompt-text" class="prompt-text"></pre>
+            </div>
+          </section>
         </div>
 
         <aside class="process-panel" aria-live="polite">
           <h3>RAG process</h3>
           <p id="process-summary" class="process-summary">Idle</p>
           <ol class="process-list" id="process-list">
-            <li id="process-step-health" class="process-step process-idle">Check API health</li>
-            <li id="process-step-stats" class="process-step process-idle">Check index status</li>
-            <li id="process-step-ingest" class="process-step process-idle">Ingest documents</li>
-            <li id="process-step-answer" class="process-step process-idle">Call /rag/answer</li>
-            <li id="process-step-llm" class="process-step process-idle">Retrieve, build prompt, generate answer</li>
-            <li id="process-step-render" class="process-step process-idle">Render response in UI</li>
+            <li id="process-step-stats" class="process-step process-idle">
+              <span class="process-step-label">Check index status</span>
+              <span class="process-step-note">Step 1</span>
+            </li>
+            <li id="process-step-ingest" class="process-step process-idle">
+              <span class="process-step-label">Ingest documents</span>
+              <span class="process-step-note">Step 1</span>
+            </li>
+            <li id="process-step-answer" class="process-step process-idle">
+              <span class="process-step-label">Call /rag/answer</span>
+              <span class="process-step-note">Step 2</span>
+            </li>
+            <li id="process-step-llm" class="process-step process-idle">
+              <span class="process-step-label">Retrieve, build prompt, generate answer</span>
+              <span class="process-step-note">Step 2</span>
+            </li>
+            <li id="process-step-render" class="process-step process-idle">
+              <span class="process-step-label">Render response in UI</span>
+              <span class="process-step-note">Step 2</span>
+            </li>
           </ol>
+          <div class="process-runtime">
+            <p id="process-runtime-label" class="process-runtime-label">Estimated total time</p>
+            <p id="process-total-time" class="process-runtime-value">-</p>
+          </div>
         </aside>
       </div>
     </section>
