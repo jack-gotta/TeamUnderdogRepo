@@ -1,7 +1,12 @@
 from fastapi import FastAPI, Depends
 from pydantic import BaseModel
 
-from ingestion import VectorStoreManager, DEFAULT_PASSAGES_SOURCE
+from ingestion import (
+    VectorStoreManager,
+    DEFAULT_PASSAGES_SOURCE,
+    DEFAULT_TEST_QA_SOURCE,
+    load_qa_pairs_from_parquet,
+)
 from ailab.utils.azure import get_ailab_auth_status
 
 
@@ -75,6 +80,61 @@ class QueryResponse(BaseModel):
     results: list[RetrievedDocument]
 
 
+class RagQueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+class RagQueryResponse(BaseModel):
+    query: str
+    top_k: int
+    embedding: list[float]
+    results: list[RetrievedDocument]
+    prompt: str
+    answer: str
+
+
+class RagEvaluationRequest(BaseModel):
+    source: str = DEFAULT_TEST_QA_SOURCE
+    limit: int = 5
+    top_k: int = 5
+
+
+class RagEvaluationItem(BaseModel):
+    question: str
+    expected_answer: str
+    generated_answer: str
+    exact_match: bool
+    contains_expected: bool
+
+
+class RagEvaluationSummary(BaseModel):
+    total: int
+    exact_match_rate: float
+    contains_expected_rate: float
+
+
+class RagEvaluationResponse(BaseModel):
+    source: str
+    limit: int
+    top_k: int
+    summary: RagEvaluationSummary
+    items: list[RagEvaluationItem]
+
+
+def _normalize_text(value: str) -> str:
+    return " ".join(value.lower().split())
+
+
+def evaluate_generated_answer(expected_answer: str, generated_answer: str) -> tuple[bool, bool]:
+    """Return exact-match and substring-style quality checks."""
+    expected = _normalize_text(expected_answer)
+    generated = _normalize_text(generated_answer)
+    exact_match = generated == expected
+    contains_expected = expected in generated if expected else False
+    return exact_match, contains_expected
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -139,6 +199,65 @@ def query_vectordb_post(
         top_k=payload.top_k,
         embedding=embedding,
         results=[RetrievedDocument(**result) for result in results],
+    )
+
+
+@app.post("/rag/query", response_model=RagQueryResponse)
+def rag_query(
+    payload: RagQueryRequest,
+    store: VectorStoreManager = Depends(get_vector_store),
+) -> RagQueryResponse:
+    """Run end-to-end retrieval-augmented generation for a user query."""
+    rag_result = store.answer_query(query_str=payload.query, top_k=payload.top_k)
+    return RagQueryResponse(
+        query=rag_result["query"],
+        top_k=rag_result["top_k"],
+        embedding=rag_result["embedding"],
+        results=[RetrievedDocument(**result) for result in rag_result["results"]],
+        prompt=rag_result["prompt"],
+        answer=rag_result["answer"],
+    )
+
+
+@app.post("/rag/evaluate", response_model=RagEvaluationResponse)
+def rag_evaluate(
+    payload: RagEvaluationRequest,
+    store: VectorStoreManager = Depends(get_vector_store),
+) -> RagEvaluationResponse:
+    """Evaluate RAG answers against a question/answer parquet dataset."""
+    qa_pairs = load_qa_pairs_from_parquet(source=payload.source, limit=payload.limit)
+    items: list[RagEvaluationItem] = []
+
+    for qa in qa_pairs:
+        rag_result = store.answer_query(query_str=qa["question"], top_k=payload.top_k)
+        exact_match, contains_expected = evaluate_generated_answer(
+            expected_answer=qa["answer"],
+            generated_answer=rag_result["answer"],
+        )
+        items.append(
+            RagEvaluationItem(
+                question=qa["question"],
+                expected_answer=qa["answer"],
+                generated_answer=rag_result["answer"],
+                exact_match=exact_match,
+                contains_expected=contains_expected,
+            )
+        )
+
+    total = len(items)
+    exact_match_rate = (sum(1 for item in items if item.exact_match) / total) if total else 0.0
+    contains_expected_rate = (sum(1 for item in items if item.contains_expected) / total) if total else 0.0
+
+    return RagEvaluationResponse(
+        source=payload.source,
+        limit=payload.limit,
+        top_k=payload.top_k,
+        summary=RagEvaluationSummary(
+            total=total,
+            exact_match_rate=exact_match_rate,
+            contains_expected_rate=contains_expected_rate,
+        ),
+        items=items,
     )
 
 

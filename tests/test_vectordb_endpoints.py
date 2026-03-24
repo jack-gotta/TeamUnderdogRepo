@@ -25,8 +25,20 @@ class _MockEmbedding(BaseEmbedding):
         return [0.1] * 8
 
 
+class _MockChatResponse:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _MockChatModel:
+    def complete(self, prompt: str) -> _MockChatResponse:
+        if "artificial intelligence" in prompt.lower():
+            return _MockChatResponse("Artificial intelligence is the simulation of human intelligence.")
+        return _MockChatResponse("I do not know.")
+
+
 def _build_test_store() -> VectorStoreManager:
-    return VectorStoreManager(embedding_model=_MockEmbedding())
+    return VectorStoreManager(embedding_model=_MockEmbedding(), chat_model=_MockChatModel())
 
 
 class TestVectorStoreStatusEndpoint:
@@ -151,6 +163,70 @@ class TestVectorStoreQueryEndpoint:
             assert data["query"] == "artificial intelligence"
             assert len(data["results"]) >= 1
             assert any(result["metadata"]["title"] in {"AI", "ML"} for result in data["results"])
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_rag_query_returns_prompt_and_answer(self):
+        """Verify /rag/query returns retrieval context, augmented prompt, and generated answer."""
+        store = _build_test_store()
+        store.add_documents([
+            Document(
+                text="Artificial intelligence is the simulation of human intelligence.",
+                metadata={"title": "AI"},
+            )
+        ])
+
+        def _override_store() -> VectorStoreManager:
+            return store
+
+        app.dependency_overrides[get_vector_store] = _override_store
+        try:
+            response = client.post("/rag/query", json={"query": "What is artificial intelligence?", "top_k": 1})
+            data = response.json()
+            assert response.status_code == 200
+            assert data["query"] == "What is artificial intelligence?"
+            assert len(data["results"]) == 1
+            assert "Context:" in data["prompt"]
+            assert "Question: What is artificial intelligence?" in data["prompt"]
+            assert "Artificial intelligence" in data["answer"]
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_rag_evaluate_returns_summary_and_items(self, monkeypatch):
+        """Verify /rag/evaluate computes per-item and aggregate quality metrics."""
+        store = _build_test_store()
+        store.add_documents([
+            Document(
+                text="Artificial intelligence is the simulation of human intelligence.",
+                metadata={"title": "AI"},
+            )
+        ])
+
+        def _override_store() -> VectorStoreManager:
+            return store
+
+        def _mock_qa_loader(source: str, limit: int | None = None) -> list[dict[str, str]]:
+            return [
+                {
+                    "question": "What is artificial intelligence?",
+                    "answer": "Artificial intelligence is the simulation of human intelligence.",
+                },
+                {
+                    "question": "Unknown question",
+                    "answer": "Some expected answer",
+                },
+            ]
+
+        monkeypatch.setattr("main.load_qa_pairs_from_parquet", _mock_qa_loader)
+        app.dependency_overrides[get_vector_store] = _override_store
+        try:
+            response = client.post("/rag/evaluate", json={"source": "mock://qa", "limit": 2, "top_k": 1})
+            data = response.json()
+            assert response.status_code == 200
+            assert data["summary"]["total"] == 2
+            assert len(data["items"]) == 2
+            assert "exact_match_rate" in data["summary"]
+            assert "contains_expected_rate" in data["summary"]
         finally:
             app.dependency_overrides.clear()
 

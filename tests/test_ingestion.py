@@ -28,6 +28,16 @@ class MockEmbedding(BaseEmbedding):
         return [0.1] * 8
 
 
+class _MockChatResponse:
+    def __init__(self, text: str):
+        self.text = text
+
+
+class MockChatModel:
+    def complete(self, prompt: str) -> _MockChatResponse:
+        return _MockChatResponse(text=f"mock-answer::{prompt[:32]}")
+
+
 @pytest.fixture
 def temp_store_dir():
     """Temporary directory for vector store."""
@@ -38,7 +48,11 @@ def temp_store_dir():
 @pytest.fixture
 def vector_store_manager_with_mock(temp_store_dir):
     """Vector store manager with a real BaseEmbedding subclass that avoids Azure auth."""
-    manager = VectorStoreManager(persist_dir=temp_store_dir, embedding_model=MockEmbedding())
+    manager = VectorStoreManager(
+        persist_dir=temp_store_dir,
+        embedding_model=MockEmbedding(),
+        chat_model=MockChatModel(),
+    )
     return manager
 
 
@@ -176,6 +190,36 @@ class TestVectorStoreQuery:
 
         assert len(results) == 1
         assert results[0]["metadata"]["title"] == "Doc 1"
+
+    def test_build_augmented_prompt_contains_query_and_context(self, vector_store_manager_with_mock):
+        """Verify augmented prompt includes question and retrieved context snippets."""
+        docs = [Document(text="Earth is the third planet.", metadata={"title": "Earth"})]
+        vector_store_manager_with_mock.add_documents(docs)
+        results = vector_store_manager_with_mock.query("Which planet is third?", top_k=1)
+
+        prompt = vector_store_manager_with_mock.build_augmented_prompt(
+            query_str="Which planet is third?",
+            retrieved_docs=results,
+        )
+
+        assert "Question: Which planet is third?" in prompt
+        assert "Earth is the third planet." in prompt
+        assert "Title: Earth" in prompt
+
+    def test_answer_query_returns_prompt_and_answer(self, vector_store_manager_with_mock):
+        """Verify full answer_query flow returns embedding, retrieval, prompt, and answer."""
+        vector_store_manager_with_mock.add_documents(
+            [Document(text="Python is a programming language.", metadata={"title": "Python"})]
+        )
+
+        result = vector_store_manager_with_mock.answer_query("What is Python?", top_k=1)
+
+        assert result["query"] == "What is Python?"
+        assert result["top_k"] == 1
+        assert len(result["embedding"]) == 8
+        assert len(result["results"]) == 1
+        assert "Question: What is Python?" in result["prompt"]
+        assert result["answer"].startswith("mock-answer::")
 
 
 class TestCreateOrLoadIndex:
