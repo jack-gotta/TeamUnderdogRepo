@@ -1,3 +1,27 @@
 .DS_Store
 .venv/
 .vscode/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Pytest cache
+.pytest_cache/
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Vector database storage (can be large)
+storage/
+*_storage/
+
+# Temporary test files
+test_*.py
+temp_*
