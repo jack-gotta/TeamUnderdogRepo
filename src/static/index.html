@@ -20,26 +20,60 @@
     <section class="panel control-panel">
       <div class="panel-header">
         <div>
-          <h2>Ask a question</h2>
+          <h2>Run the RAG flow in order</h2>
           <p>Current backend: retrieval plus answer generation on <span id="backend-url">same origin</span></p>
         </div>
-        <div id="health-pill" class="pill pill-neutral">Checking API</div>
       </div>
 
-      <form id="query-form" class="query-form">
-        <label class="query-label" for="query-input">User query</label>
-        <div class="query-row">
-          <input
-            id="query-input"
-            name="query"
-            type="text"
-            placeholder="What is Python?"
-            autocomplete="off"
-            required
-          >
-          <button id="submit-button" type="submit">Retrieve</button>
-        </div>
-      </form>
+      <div class="step-flow" aria-live="polite">
+        <section class="step-card" id="step-health-card">
+          <div class="step-title-row">
+            <p class="step-label">Step 1</p>
+            <div id="health-pill" class="pill pill-neutral">Checking API</div>
+          </div>
+          <h3>Verify API health</h3>
+          <p id="health-status-text" class="step-help">Check that the backend is reachable before indexing or querying.</p>
+          <button id="check-health-button" class="secondary-button" type="button">Check API health</button>
+        </section>
+
+        <section class="step-card" id="step-index-card">
+          <p class="step-label">Step 2</p>
+          <h3>Select a source and build index</h3>
+          <p class="step-help">Choose your dataset, then build or rebuild the vector index.</p>
+          <div class="ingest-options">
+            <label for="source-mode">Index source</label>
+            <select id="source-mode" name="source-mode">
+              <option value="sample" selected>Sample documents</option>
+              <option value="huggingface">HuggingFace passages</option>
+            </select>
+
+            <label for="document-count-input">Documents</label>
+            <input id="document-count-input" name="document-count" type="number" min="1" max="500" value="10">
+
+            <button id="rebuild-index-button" class="secondary-button" type="button">Build / Rebuild Index</button>
+          </div>
+        </section>
+
+        <section class="step-card" id="step-query-card">
+          <p class="step-label">Step 3</p>
+          <h3>Ask a question</h3>
+          <p class="step-help">Run retrieval plus answer generation and inspect the evidence below.</p>
+          <form id="query-form" class="query-form">
+            <label class="query-label" for="query-input">User query</label>
+            <div class="query-row">
+              <input
+                id="query-input"
+                name="query"
+                type="text"
+                placeholder="What is Python?"
+                autocomplete="off"
+                required
+              >
+              <button id="submit-button" type="submit">Retrieve</button>
+            </div>
+          </form>
+        </section>
+      </div>
 
       <div id="message-banner" class="message-banner message-hidden" role="status" aria-live="polite"></div>
 
@@ -64,21 +98,54 @@
         <div>
           <h2>Answer and retrieved context</h2>
           <p id="results-summary">Submit a query to inspect the generated answer and supporting documents.</p>
+          <p class="results-hint">How to read scores: higher values indicate stronger retrieval relevance.</p>
         </div>
       </div>
 
-      <div class="answer-card">
-        <p class="answer-label">Generated answer</p>
-        <div id="answer-state" class="empty-state">
-          The generated answer will appear here after a successful query.
-        </div>
-        <div id="answer-text" class="answer-text"></div>
-      </div>
+      <div class="results-layout">
+        <div class="results-main">
+          <dl class="quality-grid">
+            <div>
+              <dt>Top score</dt>
+              <dd id="quality-top-score">-</dd>
+            </div>
+            <div>
+              <dt>Average score</dt>
+              <dd id="quality-avg-score">-</dd>
+            </div>
+            <div>
+              <dt>Confidence</dt>
+              <dd><span id="quality-confidence" class="quality-pill quality-unknown">Unknown</span></dd>
+            </div>
+          </dl>
 
-      <div id="results-state" class="empty-state">
-        Retrieval results will appear here after a successful query.
+          <div class="answer-card">
+            <p class="answer-label">Generated answer</p>
+            <div id="answer-state" class="empty-state">
+              The generated answer will appear here after a successful query.
+            </div>
+            <div id="answer-text" class="answer-text"></div>
+          </div>
+
+          <div id="results-state" class="empty-state">
+            Retrieval results will appear here after a successful query.
+          </div>
+          <div id="results-list" class="results-list"></div>
+        </div>
+
+        <aside class="process-panel" aria-live="polite">
+          <h3>RAG process</h3>
+          <p id="process-summary" class="process-summary">Idle</p>
+          <ol class="process-list" id="process-list">
+            <li id="process-step-health" class="process-step process-idle">Check API health</li>
+            <li id="process-step-stats" class="process-step process-idle">Check index status</li>
+            <li id="process-step-ingest" class="process-step process-idle">Ingest documents</li>
+            <li id="process-step-answer" class="process-step process-idle">Call /rag/answer</li>
+            <li id="process-step-llm" class="process-step process-idle">Retrieve, build prompt, generate answer</li>
+            <li id="process-step-render" class="process-step process-idle">Render response in UI</li>
+          </ol>
+        </aside>
       </div>
-      <div id="results-list" class="results-list"></div>
     </section>
   </main>
 

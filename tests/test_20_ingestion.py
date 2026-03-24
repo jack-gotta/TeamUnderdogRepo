@@ -1,5 +1,7 @@
 """Tests for document ingestion pipeline."""
 
+from unittest.mock import Mock, patch
+
 from llama_index.core import Document
 
 
@@ -47,3 +49,41 @@ def test_ingest_consistent_across_calls() -> None:
     assert len(docs1) == len(docs2)
     # Same texts (for determinism)
     assert [d.text for d in docs1] == [d.text for d in docs2]
+
+
+def test_load_huggingface_documents_uses_hf_rows_when_available() -> None:
+    """Verify HuggingFace document loader maps passage rows into Documents."""
+    from ingestion import load_huggingface_documents
+
+    mock_dataset = [
+        {"id": 11, "passage": "Passage one."},
+        {"id": 12, "passage": "Passage two."},
+    ]
+    mock_loader = Mock(return_value=mock_dataset)
+
+    with patch("ingestion._get_hf_load_dataset", return_value=mock_loader):
+        docs = load_huggingface_documents(count=2)
+
+    assert len(docs) == 2
+    assert docs[0].text == "Passage one."
+    assert docs[0].metadata["source"] == "huggingface"
+    assert docs[0].metadata["id"] == 11
+
+
+def test_load_huggingface_test_questions_uses_hf_rows_when_available() -> None:
+    """Verify HuggingFace test-question loader maps question/answer pairs."""
+    from ingestion import load_huggingface_test_questions
+
+    mock_dataset = [
+        {"id": 101, "question": "Is sky blue?", "answer": "yes"},
+        {"id": 102, "question": "Is fire cold?", "answer": "no"},
+    ]
+    mock_loader = Mock(return_value=mock_dataset)
+
+    with patch("ingestion._get_hf_load_dataset", return_value=mock_loader):
+        examples = load_huggingface_test_questions(count=2)
+
+    assert len(examples) == 2
+    assert examples[0]["query"] == "Is sky blue?"
+    assert examples[0]["expected_answer"] == "yes"
+    assert examples[0]["source"] == "huggingface"

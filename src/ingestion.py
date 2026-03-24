@@ -8,6 +8,15 @@ from typing import List, Dict, Any
 from llama_index.core import Document
 
 
+def _get_hf_load_dataset():
+    """Return HuggingFace load_dataset if available, otherwise None."""
+    try:
+        from datasets import load_dataset
+        return load_dataset
+    except Exception:
+        return None
+
+
 def load_sample_documents(count: int = 10) -> List[Document]:
     """Load sample Wikipedia-like documents for development and testing.
     
@@ -60,21 +69,55 @@ def load_sample_documents(count: int = 10) -> List[Document]:
     return docs
 
 
-def load_huggingface_documents() -> List[Document]:
+def load_huggingface_documents(count: int = 50) -> List[Document]:
     """Load documents from HuggingFace rag-mini-wikipedia dataset.
     
     This function will load from:
     hf://datasets/rag-datasets/rag-mini-wikipedia/data/passages.parquet/part.0.parquet
     
-    Currently returns sample documents for testing. To be fully implemented when
-    HuggingFace datasets library is integrated.
+    Falls back to sample documents if HuggingFace loading is unavailable.
+
+    Args:
+        count: Number of documents to load.
     
     Returns:
         List of LlamaIndex Document objects.
     """
-    # For now, return sample documents
-    # This will be extended to actually load from HF when infrastructure is ready
-    return load_sample_documents(count=50)
+    load_dataset = _get_hf_load_dataset()
+    if load_dataset is None:
+        return load_sample_documents(count=count)
+
+    try:
+        dataset = load_dataset(
+            "rag-datasets/rag-mini-wikipedia",
+            "text-corpus",
+            split="passages",
+        )
+
+        docs: List[Document] = []
+        limit = min(count, len(dataset))
+        for i in range(limit):
+            row = dataset[i]
+            text = str(row.get("passage", "")).strip()
+            if not text:
+                continue
+
+            docs.append(
+                Document(
+                    text=text,
+                    metadata={
+                        "source": "huggingface",
+                        "dataset": "rag-datasets/rag-mini-wikipedia",
+                        "split": "passages",
+                        "index": i,
+                        "id": row.get("id", i),
+                    },
+                )
+            )
+
+        return docs if docs else load_sample_documents(count=count)
+    except Exception:
+        return load_sample_documents(count=count)
 
 
 def load_sample_evaluation_examples(count: int = 5) -> List[Dict[str, Any]]:
@@ -129,4 +172,35 @@ def load_huggingface_test_questions(count: int = 5) -> List[Dict[str, Any]]:
     Returns:
         List of question-answer evaluation examples.
     """
-    return load_sample_evaluation_examples(count=count)
+    load_dataset = _get_hf_load_dataset()
+    if load_dataset is None:
+        return load_sample_evaluation_examples(count=count)
+
+    try:
+        dataset = load_dataset(
+            "rag-datasets/rag-mini-wikipedia",
+            "question-answer",
+            split="test",
+        )
+
+        examples: List[Dict[str, Any]] = []
+        limit = min(count, len(dataset))
+        for i in range(limit):
+            row = dataset[i]
+            query = str(row.get("question", "")).strip()
+            answer = str(row.get("answer", "")).strip()
+            if not query or not answer:
+                continue
+
+            examples.append(
+                {
+                    "query": query,
+                    "expected_answer": answer,
+                    "id": row.get("id", i),
+                    "source": "huggingface",
+                }
+            )
+
+        return examples if examples else load_sample_evaluation_examples(count=count)
+    except Exception:
+        return load_sample_evaluation_examples(count=count)

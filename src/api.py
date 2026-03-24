@@ -103,22 +103,29 @@ def echo(body: EchoRequest) -> EchoResponse:
 
 
 @app.post("/ingest")
-def ingest(document_count: int = 10) -> Dict[str, Any]:
-    """Ingest sample documents and build vector index.
+def ingest(document_count: int = 10, use_sample: bool = True) -> Dict[str, Any]:
+    """Ingest documents and build vector index.
     
     Args:
         document_count: Number of documents to ingest.
+        use_sample: If True, ingest sample docs. If False, try HuggingFace docs.
         
     Returns:
         Dictionary with ingestion status and index stats.
     """
     global _vector_index
     
-    from ingestion import load_sample_documents
+    from ingestion import load_sample_documents, load_huggingface_documents
     from vector_db import create_vector_index
     
     # Load documents
-    documents = load_sample_documents(count=document_count)
+    if use_sample:
+        documents = load_sample_documents(count=document_count)
+        source = "sample"
+    else:
+        documents = load_huggingface_documents(count=document_count)
+        first_source = documents[0].metadata.get("source") if documents else None
+        source = first_source if isinstance(first_source, str) else "huggingface"
     
     # Create index
     _vector_index = create_vector_index(documents=documents)
@@ -127,6 +134,7 @@ def ingest(document_count: int = 10) -> Dict[str, Any]:
         "status": "success",
         "documents_ingested": len(documents),
         "index_ready": _vector_index is not None,
+        "source": source,
     }
 
 

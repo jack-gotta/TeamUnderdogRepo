@@ -29,6 +29,28 @@ def test_ingest_endpoint_returns_success() -> None:
             assert data["index_ready"] is True
 
 
+def test_ingest_endpoint_can_use_huggingface_loader() -> None:
+    """Verify /ingest can ingest from the HuggingFace loader path."""
+    with patch('ingestion.load_huggingface_documents') as mock_load_docs:
+        with patch('vector_db.create_vector_index') as mock_create_index:
+            mock_docs = [Mock() for _ in range(4)]
+            for doc in mock_docs:
+                doc.metadata = {"source": "huggingface"}
+            mock_load_docs.return_value = mock_docs
+
+            mock_index = Mock()
+            mock_create_index.return_value = mock_index
+
+            response = client.post('/ingest?document_count=4&use_sample=false')
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data['status'] == 'success'
+            assert data['documents_ingested'] == 4
+            assert data['index_ready'] is True
+            assert data['source'] == 'huggingface'
+
+
 def test_vector_db_stats_endpoint_no_index() -> None:
     """Verify /vector-db/stats returns empty stats when no index loaded."""
     # Reset global state
